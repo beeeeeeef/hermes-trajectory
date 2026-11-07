@@ -292,6 +292,19 @@ function entryLabel(entry) {
   return entry.kind
 }
 
+function Section({ title, subtitle, children, className }) {
+  return jsxs('section', {
+    className: `rounded-md border border-(--ui-stroke-secondary) bg-(--ui-surface-background) p-2.5 ${className ?? ''}`,
+    children: [
+      jsxs('div', { className: 'mb-1.5 flex items-baseline gap-2', children: [
+        jsx('h3', { className: 'text-[0.75rem] font-medium text-(--ui-text-primary)', children: title }),
+        subtitle ? jsx('span', { className: 'text-[0.6875rem] text-(--ui-text-tertiary)', children: subtitle }) : null
+      ] }),
+      children
+    ]
+  })
+}
+
 function EntryRow({ entry }) {
   const [open, setOpen] = useState(false)
   const isTool = entry.kind === 'tool'
@@ -366,17 +379,18 @@ function TrajectoryPanel() {
   }
 
   const entries = state.sessionId === sessionId ? state.entries : []
-  return jsxs('div', { className: 'flex h-full flex-col gap-2 overflow-auto p-2 text-(--ui-text-primary)', children: [
+  return jsxs('div', { className: 'flex h-full flex-col gap-2 overflow-auto bg-(--ui-surface-background) p-2 text-(--ui-text-primary)', children: [
     jsxs('div', { className: 'flex items-baseline gap-2', children: [
       jsx('div', { className: 'text-sm font-semibold', children: 'Trajectory' }),
       jsx('button', {
         type: 'button',
-        className: 'ml-auto text-[0.625rem] text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)',
+        disabled: state.loading,
+        className: 'ml-auto min-h-8 rounded-md border border-(--ui-stroke-secondary) px-2.5 py-1 text-[0.75rem] text-(--ui-text-secondary) enabled:hover:bg-(--ui-bg-tertiary) disabled:opacity-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--ui-accent)',
         onClick: () => { void loadTrajectory(sessionId, profile, { replace: false }) },
         children: state.loading ? 'Refreshing…' : 'Refresh'
       })
     ] }),
-    jsx('p', { className: 'text-[0.6875rem] text-(--ui-text-tertiary)', children: 'Tool results are kept in memory and disappear when the plugin reloads or Hermes restarts. History keeps call arguments, not most outputs.' }),
+    jsx('p', { className: 'text-[0.75rem] text-(--ui-text-secondary)', children: 'Tool results are kept in memory and disappear when the plugin reloads or Hermes restarts. History keeps call arguments, not most outputs.' }),
     state.loading && entries.length === 0
       ? jsx('div', { className: 'text-[0.75rem] text-(--ui-text-tertiary)', children: 'Reading session history…' })
       : entries.length === 0

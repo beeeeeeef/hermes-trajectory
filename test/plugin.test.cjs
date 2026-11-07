@@ -244,6 +244,8 @@ const history = {
 
   const tree = sandbox.TrajectoryPanel()
   assert.ok(tree)
+  const section = sandbox.Section({ title: 'T', subtitle: 'S', className: 'bg-(--ui-surface-background)', children: null })
+  assert.ok(String(section.props.className).includes('bg-(--ui-surface-background)'))
 
   const beforeStart = sandbox.snapshotEntries().length
   listeners.get('message.start')[0]({ session_id: 'runtime-1' })

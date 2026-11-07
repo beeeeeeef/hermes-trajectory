@@ -305,56 +305,79 @@ function Section({ title, subtitle, children, className }) {
   })
 }
 
+function hasDetailOf(entry) {
+  return entry.kind === 'tool'
+    ? Boolean(entry.args) || entry.resultAvailable
+    : Boolean(entry.text || entry.commentary || entry.reasoning)
+}
+
+/** Whether a row can open, and the label that affordance announces. */
+function disclosureOf(entry) {
+  return hasDetailOf(entry) ? { expandable: true, label: 'Expand' } : { expandable: false, label: '' }
+}
+
 function EntryRow({ entry }) {
   const [open, setOpen] = useState(false)
   const isTool = entry.kind === 'tool'
-  const hasDetail = isTool
-    ? Boolean(entry.args) || entry.resultAvailable
-    : Boolean(entry.text || entry.commentary || entry.reasoning)
+  const disclosure = disclosureOf(entry)
+  const hasDetail = disclosure.expandable
   const time = typeof entry.at === 'number' ? new Date(entry.at).toLocaleTimeString() : ''
+  const headerClass = 'flex w-full items-baseline gap-2 text-left'
+  const headerChildren = [
+    jsx('span', { className: 'shrink-0 text-[0.6875rem] text-(--ui-text-tertiary)', children: disclosure.expandable ? (open ? '▾' : '▸') : '' }),
+    jsx('span', { className: 'shrink-0 text-[0.6875rem] text-(--ui-text-tertiary)', children: entryLabel(entry) }),
+    jsx('span', { className: 'min-w-0 truncate font-mono text-[0.75rem] text-(--ui-text-primary)', children: isTool ? entry.name || 'tool' : 'message' }),
+    sourceBadge(entry)
+      ? jsx('span', { className: 'shrink-0 rounded border border-(--ui-stroke-tertiary) px-1 text-[0.625rem] text-(--ui-text-tertiary)', children: sourceBadge(entry) })
+      : null,
+    time ? jsx('span', { className: 'ml-auto shrink-0 text-[0.6875rem] text-(--ui-text-tertiary)', children: time }) : null,
+    isTool && entry.durationS !== null
+      ? jsx('span', { className: 'shrink-0 text-[0.6875rem] text-(--ui-text-tertiary)', children: `${entry.durationS.toFixed(2)}s` })
+      : null
+  ]
   return jsxs('div', {
-    className: 'rounded-md border border-(--ui-stroke-secondary) px-2 py-1.5',
+    className: 'rounded-md border border-(--ui-stroke-secondary) bg-(--ui-surface-background) px-2 py-1.5',
     children: [
-      jsxs('button', {
-        type: 'button',
-        className: 'flex w-full items-baseline gap-2 text-left',
-        onClick: () => setOpen(value => !value),
-        children: [
-          jsx('span', { className: 'text-[0.625rem] uppercase tracking-wide text-(--ui-text-quaternary)', children: entryLabel(entry) }),
-          jsx('span', { className: 'truncate font-mono text-[0.75rem] text-(--ui-text-primary)', children: isTool ? entry.name || 'tool' : 'message' }),
-          sourceBadge(entry)
-            ? jsx('span', { className: 'shrink-0 rounded border border-(--ui-stroke-tertiary) px-1 text-[0.5625rem] text-(--ui-text-quaternary)', children: sourceBadge(entry) })
-            : null,
-          time ? jsx('span', { className: 'ml-auto shrink-0 text-[0.625rem] text-(--ui-text-quaternary)', children: time }) : null,
-          isTool && entry.durationS !== null
-            ? jsx('span', { className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary)', children: `${entry.durationS.toFixed(2)}s` })
-            : null
-        ]
-      }),
+      disclosure.expandable
+        ? jsx('button', {
+            type: 'button',
+            'aria-expanded': open,
+            'aria-label': `${open ? 'Collapse' : 'Expand'} ${entryLabel(entry)}`,
+            className: `${headerClass} rounded-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--ui-accent)`,
+            onClick: () => setOpen(value => !value),
+            children: headerChildren
+          })
+        : jsx('div', { className: headerClass, children: headerChildren }),
       !open && isTool && entry.args
-        ? jsx('div', { className: 'mt-0.5 truncate font-mono text-[0.625rem] text-(--ui-text-quaternary)', title: entry.args, children: entry.args })
+        ? jsx('div', { className: 'mt-0.5 truncate font-mono text-[0.6875rem] text-(--ui-text-tertiary)', title: entry.args, children: entry.args })
         : null,
       !open || !hasDetail
-        ? jsx('div', { className: 'mt-0.5 break-words text-[0.6875rem] text-(--ui-text-tertiary)', children: statusText(entry) || '—' })
+        ? jsx('div', { className: 'mt-0.5 break-words text-[0.75rem] text-(--ui-text-secondary)', children: statusText(entry) || '—' })
         : null,
       open
         ? jsxs('div', { className: 'mt-1 flex flex-col gap-1 border-t border-(--ui-stroke-secondary) pt-1', children: [
           !isTool && entry.text
-            ? jsx('div', { className: 'whitespace-pre-wrap break-words text-[0.6875rem] text-(--ui-text-secondary)', children: entry.text })
+            ? jsx('div', { className: 'whitespace-pre-wrap break-words text-[0.75rem] text-(--ui-text-secondary)', children: entry.text })
             : null,
           !isTool && entry.commentary
-            ? jsx('div', { className: 'whitespace-pre-wrap break-words text-[0.6875rem] text-(--ui-text-tertiary)', children: `Commentary: ${entry.commentary}` })
+            ? jsx('div', { className: 'whitespace-pre-wrap break-words text-[0.75rem] text-(--ui-text-tertiary)', children: `Commentary: ${entry.commentary}` })
             : null,
           !isTool && entry.reasoning
-            ? jsx('div', { className: 'whitespace-pre-wrap break-words text-[0.6875rem] text-(--ui-text-tertiary)', children: `Thinking: ${entry.reasoning}` })
+            ? jsx('div', { className: 'whitespace-pre-wrap break-words text-[0.75rem] text-(--ui-text-tertiary)', children: `Thinking: ${entry.reasoning}` })
             : null,
           isTool && entry.args
-            ? jsx('div', { className: 'font-mono text-[0.625rem] break-all text-(--ui-text-quaternary)', children: entry.args })
+            ? jsxs('div', { className: 'flex flex-col gap-0.5', children: [
+                jsx('div', { className: 'text-[0.6875rem] text-(--ui-text-tertiary)', children: 'Input' }),
+                jsx('div', { className: 'break-all font-mono text-[0.6875rem] text-(--ui-text-secondary)', children: entry.args })
+              ] })
             : null,
           isTool
-            ? jsx('div', { className: 'whitespace-pre-wrap break-words font-mono text-[0.625rem] text-(--ui-text-secondary)', children: entry.resultAvailable
-              ? entry.result || '(empty output)'
-              : 'Tool output is not available for this record.' })
+            ? jsxs('div', { className: 'flex flex-col gap-0.5', children: [
+                jsx('div', { className: 'text-[0.6875rem] text-(--ui-text-tertiary)', children: 'Output' }),
+                jsx('div', { className: 'whitespace-pre-wrap break-words font-mono text-[0.6875rem] text-(--ui-text-secondary)', children: entry.resultAvailable
+                  ? entry.result || '(empty output)'
+                  : 'Tool output is not available for this record.' })
+              ] })
             : null
         ] })
         : null
@@ -372,9 +395,9 @@ function TrajectoryPanel() {
   }, [sessionId, profile])
 
   if (!sessionId) {
-    return jsxs('div', { className: 'flex h-full flex-col items-center justify-center gap-2 px-4 text-center', children: [
+    return jsxs('div', { className: 'flex h-full flex-col items-center justify-center gap-2 bg-(--ui-surface-background) px-4 text-center', children: [
       jsx('div', { className: 'text-[0.8125rem] text-(--ui-text-secondary)', children: 'No active session' }),
-      jsx('div', { className: 'text-[0.6875rem] text-(--ui-text-quaternary)', children: 'Open a chat to see its trajectory.' })
+      jsx('div', { className: 'text-[0.75rem] text-(--ui-text-tertiary)', children: 'Open a chat to see its trajectory.' })
     ] })
   }
 

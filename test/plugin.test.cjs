@@ -246,6 +246,12 @@ const history = {
   assert.ok(tree)
   const section = sandbox.Section({ title: 'T', subtitle: 'S', className: 'bg-(--ui-surface-background)', children: null })
   assert.ok(String(section.props.className).includes('bg-(--ui-surface-background)'))
+  const toolDisclosure = sandbox.disclosureOf(sandbox.fromHistoryRow({ role: 'tool', tool_call_id: 'c1', name: 'terminal', args: {}, timestamp: 1 }, 0))
+  assert.equal(toolDisclosure.expandable, true)
+  assert.equal(toolDisclosure.label, 'Expand')
+  const emptyDisclosure = sandbox.disclosureOf(sandbox.fromHistoryRow({ role: 'assistant', row_id: 9, text: '', timestamp: 1 }, 0))
+  assert.equal(emptyDisclosure.expandable, false)
+  assert.equal(emptyDisclosure.label, '')
 
   const beforeStart = sandbox.snapshotEntries().length
   listeners.get('message.start')[0]({ session_id: 'runtime-1' })

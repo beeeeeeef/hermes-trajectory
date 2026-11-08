@@ -284,7 +284,19 @@ function statusTextOf(entry) {
 function sourceBadge(entry) {
   if (entry.kind !== 'tool') return ''
   if (entry.origin === 'live') return 'live'
-  return entry.resultAvailable ? 'history output' : 'history arguments only'
+  return entry.resultAvailable ? 'output' : 'args only'
+}
+
+function sourceTitle(entry) {
+  if (entry.kind !== 'tool') return ''
+  if (entry.origin === 'live') return 'Result captured while the plugin was running'
+  return entry.resultAvailable ? 'Output came from the session history' : 'Arguments came from the session history; output was not stored'
+}
+
+function sourceTone(entry) {
+  return entry.origin === 'live'
+    ? 'border-(--ui-accent) text-(--ui-accent)'
+    : 'border-(--ui-stroke-secondary) text-(--ui-text-tertiary)'
 }
 
 function entryLabel(entry) {
@@ -362,13 +374,18 @@ function EntryRow({ entry }) {
   const source = sourceBadge(entry)
   const time = typeof entry.at === 'number' ? new Date(entry.at).toLocaleTimeString() : ''
   const duration = isTool && entry.durationS !== null ? `${entry.durationS.toFixed(2)}s` : ''
+  const gridStyle = { display: 'grid', gridTemplateColumns: '56px minmax(0,1fr)' }
 
   const content = [
     jsxs('div', { className: 'flex items-baseline gap-2', children: [
       jsx('span', { className: `w-14 shrink-0 text-[0.6875rem] ${roleClassOf(entry)}`, children: entryLabel(entry) }),
       jsx('span', { className: 'min-w-0 flex-1 truncate font-mono text-[0.75rem] text-(--ui-text-primary)', children: isTool ? entry.name || 'tool' : 'message' }),
       source
-        ? jsx('span', { className: 'shrink-0 text-[0.6875rem] text-(--ui-text-tertiary)', children: source })
+        ? jsx('span', {
+            title: sourceTitle(entry),
+            className: `shrink-0 rounded-sm border px-1 text-[0.625rem] ${sourceTone(entry)}`,
+            children: source
+          })
         : null,
       duration
         ? jsx('span', { className: 'shrink-0 text-[0.625rem] tabular-nums text-(--ui-text-tertiary)', children: duration })
@@ -389,13 +406,15 @@ function EntryRow({ entry }) {
       : null
   ]
 
-  const body = jsxs('div', { className: 'grid w-full grid-cols-[56px_minmax(0,1fr)] text-left', children: [
+  const body = jsxs('div', { style: gridStyle, className: 'w-full text-left', children: [
     jsx('span', { className: 'border-r border-(--ui-stroke-secondary) py-1.5 pr-2 text-right font-mono text-[0.625rem] tabular-nums text-(--ui-text-tertiary)', children: time }),
     jsx('span', { className: 'min-w-0 px-2 py-1.5', children: content })
   ] })
 
+  const startsTurn = entry.kind === 'user' && !entry.notice
   return jsxs('div', {
     className: 'border-b border-(--ui-stroke-secondary)',
+    style: startsTurn ? { marginTop: '8px' } : undefined,
     children: [
       disclosure.expandable
         ? jsx('button', {
@@ -408,9 +427,9 @@ function EntryRow({ entry }) {
           })
         : jsx('div', { className: 'block w-full', children: body }),
       open && sections.length > 0
-        ? jsxs('div', { className: 'grid grid-cols-[56px_minmax(0,1fr)]', children: [
+        ? jsxs('div', { style: gridStyle, children: [
             jsx('span', { className: 'border-r border-(--ui-stroke-secondary)' }),
-            jsx('div', { className: 'flex flex-col gap-1.5 border-t border-(--ui-stroke-secondary) px-2 pb-2 pl-16 pt-1.5', children: sections.map((section, index) => jsxs('div', { className: 'flex flex-col gap-0.5', children: [
+            jsx('div', { className: 'flex flex-col gap-1.5 border-t border-(--ui-stroke-secondary) bg-(--ui-bg-tertiary) px-2 pb-2 pl-16 pt-1.5', children: sections.map((section, index) => jsxs('div', { className: 'flex flex-col gap-0.5', children: [
               section.label
                 ? jsx('div', { className: 'text-[0.625rem] text-(--ui-text-tertiary)', children: section.label })
                 : null,
@@ -461,7 +480,7 @@ function TrajectoryPanel() {
           children: state.loading ? 'Refreshing…' : 'Refresh'
         })
       ] }),
-      jsxs('div', { className: 'grid grid-cols-[56px_minmax(0,1fr)] border-b border-(--ui-stroke-secondary) text-[0.625rem] text-(--ui-text-tertiary)', children: [
+      jsxs('div', { style: { display: 'grid', gridTemplateColumns: '56px minmax(0,1fr)' }, className: 'border-b border-(--ui-stroke-secondary) text-[0.625rem] text-(--ui-text-tertiary)', children: [
         jsx('span', { className: 'border-r border-(--ui-stroke-secondary) py-1 pr-2 text-right', children: 'time' }),
         jsx('span', { className: 'px-2 py-1', children: 'event' })
       ] })

@@ -102,7 +102,7 @@ const history = {
   assert.equal(state[2].key, 'tool:call_00_A')
   assert.equal(state[2].result, '')
   assert.match(sandbox.statusTextOf(state[2]), /Historical output not available/)
-  assert.equal(sandbox.sourceBadge(state[2]), 'history arguments only')
+  assert.equal(sandbox.sourceBadge(state[2]), 'args only')
   assert.ok(state[2].args.includes('pwd'), 'historical arguments stay visible while collapsed')
   const reasoningOnly = sandbox.fromHistoryRow({ role: 'assistant', row_id: 77, text: '', reasoning: 'working through the problem' }, 0)
   assert.match(sandbox.statusTextOf(reasoningOnly), /working through the problem/, 'reasoning-only assistant rows need a visible explanation')

@@ -256,6 +256,25 @@ const history = {
   const beforeStart = sandbox.snapshotEntries().length
   listeners.get('message.start')[0]({ session_id: 'runtime-1' })
   assert.equal(sandbox.snapshotActivity(), 'generating')
+
+  // Placement repair runs once, so a stranded pane returns but a deliberate
+  // close is not undone on every reload.
+  const repairCalls = []
+  const repairStore = new Map()
+  const repairCtx = {
+    register: () => () => {},
+    onEvent: () => () => {},
+    onDispose: () => () => {},
+    storage: {
+      get: key => (repairStore.has(key) ? repairStore.get(key) : null),
+      set: (key, value) => { repairStore.set(key, value) }
+    }
+  }
+  sandbox.host.undismissPane = paneId => { repairCalls.push(paneId) }
+  sandbox.plugin.register(repairCtx)
+  assert.deepEqual(repairCalls, ['hermes-trajectory:panel'], 'first load must clear the remembered close')
+  sandbox.plugin.register(repairCtx)
+  assert.equal(repairCalls.length, 1, 'the repair must not run again on later reloads')
   assert.equal(sandbox.snapshotEntries().length, beforeStart, 'message.start must not invent a user row')
 
   console.log('PASS trajectory: history mapping, tool merge, duplicate complete, orphan complete, refresh callback, session race')

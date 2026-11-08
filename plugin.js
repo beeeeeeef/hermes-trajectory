@@ -450,5 +450,17 @@ export default {
       data: { placement: 'right', width: '380px' },
       render: () => jsx(TrajectoryPanel, {})
     })
+
+    // One-time placement repair: a pane that was once closed keeps a dismissal
+    // record across restarts, so this plugin would load yet never appear. Clear
+    // it once and remember, so a later deliberate close still survives.
+    try {
+      if (ctx.storage?.get?.('placementRepaired.v1') !== true) {
+        if (typeof host.undismissPane === 'function') host.undismissPane(`${ID}:panel`)
+        ctx.storage?.set?.('placementRepaired.v1', true)
+      }
+    } catch {
+      // Older desktops without storage/undismissPane: leave the layout alone.
+    }
   }
 }

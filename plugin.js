@@ -283,8 +283,8 @@ function statusTextOf(entry) {
 
 function sourceBadge(entry) {
   if (entry.kind !== 'tool') return ''
-  if (entry.origin === 'live') return 'Captured live'
-  return entry.resultAvailable ? 'History · output' : 'History · args only'
+  if (entry.origin === 'live') return 'live'
+  return entry.resultAvailable ? 'history output' : 'history arguments only'
 }
 
 function entryLabel(entry) {
@@ -359,40 +359,40 @@ function EntryRow({ entry }) {
   const disclosure = disclosureOf(entry)
   const preview = previewOf(entry)
   const sections = detailSectionsOf(entry)
+  const source = sourceBadge(entry)
   const time = typeof entry.at === 'number' ? new Date(entry.at).toLocaleTimeString() : ''
-  const badge = sourceBadge(entry)
-  const meta = [
-    time,
-    isTool && entry.durationS !== null ? `${entry.durationS.toFixed(2)}s` : ''
-  ].filter(Boolean).join(' · ')
+  const duration = isTool && entry.durationS !== null ? `${entry.durationS.toFixed(2)}s` : ''
 
-  const body = [
+  const content = [
     jsxs('div', { className: 'flex items-baseline gap-2', children: [
-      jsx('span', { className: `w-12 shrink-0 text-[0.6875rem] ${roleClassOf(entry)}`, children: entryLabel(entry) }),
-      jsxs('span', { className: 'flex min-w-0 flex-1 items-baseline gap-1.5', children: [
-        jsx('span', { className: 'min-w-0 truncate font-mono text-[0.75rem] text-(--ui-text-primary)', children: isTool ? entry.name || 'tool' : 'message' }),
-        disclosure.expandable
-          ? jsx('span', { className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary)', children: open ? '▾' : '▸' })
-          : null
-      ] }),
-      meta ? jsx('span', { className: 'shrink-0 tabular-nums text-[0.6875rem] text-(--ui-text-tertiary)', children: meta }) : null
+      jsx('span', { className: `w-14 shrink-0 text-[0.6875rem] ${roleClassOf(entry)}`, children: entryLabel(entry) }),
+      jsx('span', { className: 'min-w-0 flex-1 truncate font-mono text-[0.75rem] text-(--ui-text-primary)', children: isTool ? entry.name || 'tool' : 'message' }),
+      source
+        ? jsx('span', { className: 'shrink-0 text-[0.6875rem] text-(--ui-text-tertiary)', children: source })
+        : null,
+      duration
+        ? jsx('span', { className: 'shrink-0 text-[0.625rem] tabular-nums text-(--ui-text-tertiary)', children: duration })
+        : null,
+      disclosure.expandable
+        ? jsx('span', { className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary)', children: open ? '▾' : '▸' })
+        : null
     ] }),
     preview
-      ? jsxs('div', { className: 'mt-0.5 flex items-baseline gap-1.5 pl-14', children: [
-          badge
-            ? jsx('span', { className: 'shrink-0 rounded-sm border border-(--ui-stroke-tertiary) px-1 text-[0.625rem] text-(--ui-text-tertiary)', children: badge })
-            : null,
-          jsx('div', {
-            className: isTool
-              ? 'min-w-0 truncate font-mono text-[0.6875rem] text-(--ui-text-tertiary)'
-              : 'min-w-0 text-[0.75rem] text-(--ui-text-secondary)',
-            style: open || isTool ? undefined : clampStyle(2),
-            title: preview,
-            children: preview
-          })
-        ] })
+      ? jsx('div', { className: 'mt-0.5 flex items-baseline pl-14', children: jsx('div', {
+          className: isTool
+            ? 'min-w-0 truncate font-mono text-[0.6875rem] text-(--ui-text-tertiary)'
+            : 'min-w-0 text-[0.75rem] text-(--ui-text-secondary)',
+          style: open || isTool ? undefined : clampStyle(2),
+          title: preview,
+          children: preview
+        }) })
       : null
   ]
+
+  const body = jsxs('div', { className: 'grid w-full grid-cols-[56px_minmax(0,1fr)] text-left', children: [
+    jsx('span', { className: 'border-r border-(--ui-stroke-secondary) py-1.5 pr-2 text-right font-mono text-[0.625rem] tabular-nums text-(--ui-text-tertiary)', children: time }),
+    jsx('span', { className: 'min-w-0 px-2 py-1.5', children: content })
+  ] })
 
   return jsxs('div', {
     className: 'border-b border-(--ui-stroke-secondary)',
@@ -401,24 +401,27 @@ function EntryRow({ entry }) {
         ? jsx('button', {
             type: 'button',
             'aria-expanded': open,
-            'aria-label': `${open ? 'Collapse' : 'Expand'} ${entryLabel(entry)}`,
-            className: 'w-full px-1 py-1.5 text-left hover:bg-(--ui-bg-tertiary) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--ui-accent)',
+            'aria-label': `${open ? 'Collapse' : 'Expand'} ${entryLabel(entry)}: ${preview.slice(0, 80)}`,
+            className: 'block w-full hover:bg-(--ui-bg-tertiary) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--ui-accent)',
             onClick: () => setOpen(value => !value),
             children: body
           })
-        : jsx('div', { className: 'px-1 py-1.5', children: body }),
+        : jsx('div', { className: 'block w-full', children: body }),
       open && sections.length > 0
-        ? jsx('div', { className: 'flex flex-col gap-1.5 border-t border-(--ui-stroke-secondary) px-1 pb-2 pl-14 pt-1.5', children: sections.map((section, index) => jsxs('div', { className: 'flex flex-col gap-0.5', children: [
-            section.label
-              ? jsx('div', { className: 'text-[0.6875rem] text-(--ui-text-tertiary)', children: section.label })
-              : null,
-            jsx('div', {
-              className: section.mono
-                ? 'whitespace-pre-wrap break-words font-mono text-[0.6875rem] text-(--ui-text-secondary)'
-                : 'whitespace-pre-wrap break-words text-[0.75rem] text-(--ui-text-secondary)',
-              children: section.text
-            })
-          ] }, index)) })
+        ? jsxs('div', { className: 'grid grid-cols-[56px_minmax(0,1fr)]', children: [
+            jsx('span', { className: 'border-r border-(--ui-stroke-secondary)' }),
+            jsx('div', { className: 'flex flex-col gap-1.5 border-t border-(--ui-stroke-secondary) px-2 pb-2 pl-16 pt-1.5', children: sections.map((section, index) => jsxs('div', { className: 'flex flex-col gap-0.5', children: [
+              section.label
+                ? jsx('div', { className: 'text-[0.625rem] text-(--ui-text-tertiary)', children: section.label })
+                : null,
+              jsx('div', {
+                className: section.mono
+                  ? 'whitespace-pre-wrap break-words font-mono text-[0.6875rem] text-(--ui-text-secondary)'
+                  : 'whitespace-pre-wrap break-words text-[0.75rem] text-(--ui-text-secondary)',
+                children: section.text
+              })
+            ] }, index)) })
+          ] })
         : null
     ]
   })
@@ -441,29 +444,46 @@ function TrajectoryPanel() {
   }
 
   const entries = state.sessionId === sessionId ? state.entries : []
+  const toolCount = entries.filter(entry => entry.kind === 'tool').length
   return jsxs('div', { className: 'flex h-full flex-col overflow-auto bg-(--ui-surface-background) text-(--ui-text-primary)', children: [
-    jsxs('div', { className: 'sticky top-0 z-10 flex shrink-0 items-center gap-2 border-b border-(--ui-stroke-secondary) bg-(--ui-surface-background) px-2 py-1.5', children: [
-      jsx('div', { className: 'text-sm font-semibold', children: 'Trajectory' }),
-      jsx('span', { className: 'text-[0.6875rem] tabular-nums text-(--ui-text-tertiary)', children: entries.length > 0 ? `${entries.length} records` : '' }),
-      jsx('button', {
-        type: 'button',
-        disabled: state.loading,
-        className: 'ml-auto min-h-7 rounded-md border border-(--ui-stroke-secondary) px-2 text-[0.75rem] text-(--ui-text-secondary) enabled:hover:bg-(--ui-bg-tertiary) disabled:opacity-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--ui-accent)',
-        onClick: () => { void loadTrajectory(sessionId, profile, { replace: false }) },
-        children: state.loading ? 'Refreshing…' : 'Refresh'
-      })
+    jsxs('div', { className: 'sticky top-0 z-10 shrink-0 bg-(--ui-surface-background)', children: [
+      jsxs('div', { className: 'flex items-center gap-2 border-b border-(--ui-stroke-secondary) px-2 py-1.5', children: [
+        jsx('div', { className: 'text-sm font-semibold', children: 'Trajectory' }),
+        jsxs('div', { className: 'flex items-baseline gap-2 text-[0.6875rem] tabular-nums text-(--ui-text-tertiary)', children: [
+          jsx('span', { children: `${entries.length} events` }),
+          jsx('span', { className: 'border-l border-(--ui-stroke-secondary) pl-2', children: `${toolCount} tools` })
+        ] }),
+        jsx('button', {
+          type: 'button',
+          disabled: state.loading,
+          className: 'ml-auto min-h-7 rounded-md border border-(--ui-stroke-secondary) px-2 text-[0.75rem] text-(--ui-text-secondary) enabled:hover:bg-(--ui-bg-tertiary) disabled:opacity-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--ui-accent)',
+          onClick: () => { void loadTrajectory(sessionId, profile, { replace: false }) },
+          children: state.loading ? 'Refreshing…' : 'Refresh'
+        })
+      ] }),
+      jsxs('div', { className: 'grid grid-cols-[56px_minmax(0,1fr)] border-b border-(--ui-stroke-secondary) text-[0.625rem] text-(--ui-text-tertiary)', children: [
+        jsx('span', { className: 'border-r border-(--ui-stroke-secondary) py-1 pr-2 text-right', children: 'time' }),
+        jsx('span', { className: 'px-2 py-1', children: 'event' })
+      ] })
     ] }),
-    jsx('p', { className: 'shrink-0 px-2 py-1 text-[0.6875rem] text-(--ui-text-tertiary)', children: 'Tool output is memory-only; history keeps arguments, not outputs.' }),
     state.loading && entries.length === 0
       ? jsx('div', { className: 'px-2 py-2 text-[0.75rem] text-(--ui-text-tertiary)', children: 'Reading session history…' })
       : entries.length === 0
-        ? jsx('div', { className: 'px-2 py-2 text-[0.75rem] text-(--ui-text-tertiary)', children: state.notice || 'No records yet.' })
-        : jsx('div', { className: 'border-t border-(--ui-stroke-secondary)', children: entries.map(entry => jsx(EntryRow, { entry }, entry.key)) }),
+        ? state.notice
+          ? jsx('div', { className: 'px-2 py-2 text-[0.75rem] text-(--ui-text-tertiary)', children: state.notice })
+          : jsxs('div', { className: 'flex flex-col gap-1 px-2 py-2', children: [
+              jsx('div', { className: 'text-[0.75rem] text-(--ui-text-secondary)', children: 'No records yet.' }),
+              jsx('div', { className: 'text-[0.6875rem] text-(--ui-text-tertiary)', children: 'Send a message to start the ledger.' })
+            ] })
+        : jsx('div', { children: entries.map(entry => jsx(EntryRow, { entry }, entry.key)) }),
     state.activity === 'generating'
       ? jsx('div', { className: 'px-2 py-1 text-[0.6875rem] text-(--ui-accent)', children: 'Assistant is responding…' })
       : null,
     state.notice && entries.length > 0
       ? jsx('div', { className: 'px-2 py-1 text-[0.6875rem] text-(--ui-text-quaternary)', children: state.notice })
+      : null,
+    entries.length > 0
+      ? jsx('div', { className: 'border-t border-(--ui-stroke-secondary) px-2 py-2 text-[0.6875rem] text-(--ui-text-tertiary)', children: 'Tool output is memory-only; history keeps arguments, not outputs.' })
       : null
   ] })
 }

@@ -102,7 +102,7 @@ const history = {
   assert.equal(state[2].key, 'tool:call_00_A')
   assert.equal(state[2].result, '')
   assert.match(sandbox.statusTextOf(state[2]), /Historical output not available/)
-  assert.equal(sandbox.sourceBadge(state[2]), 'History · args only')
+  assert.equal(sandbox.sourceBadge(state[2]), 'history arguments only')
   assert.ok(state[2].args.includes('pwd'), 'historical arguments stay visible while collapsed')
   const reasoningOnly = sandbox.fromHistoryRow({ role: 'assistant', row_id: 77, text: '', reasoning: 'working through the problem' }, 0)
   assert.match(sandbox.statusTextOf(reasoningOnly), /working through the problem/, 'reasoning-only assistant rows need a visible explanation')
@@ -157,7 +157,7 @@ const history = {
   const tool = merged.find(entry => entry.key === 'tool:call_00_A')
   assert.equal(tool.result, 'file-a\nfile-b')
   assert.equal(tool.durationS, 3.9649)
-  assert.equal(sandbox.sourceBadge(tool), 'Captured live')
+  assert.equal(sandbox.sourceBadge(tool), 'live')
 
   sandbox.applyToolComplete({
     session_id: 'runtime-1',
@@ -180,7 +180,7 @@ const history = {
   assert.equal(refreshed.some(entry => entry.key === 'row:44'), true)
   const refreshedTool = refreshed.find(entry => entry.key === 'tool:call_00_A')
   assert.equal(refreshedTool.result, 'file-a\nfile-b', 'history refresh keeps the live tool result')
-  assert.equal(sandbox.sourceBadge(refreshedTool), 'Captured live', 'a row that kept a live result stays labelled live after refresh')
+  assert.equal(sandbox.sourceBadge(refreshedTool), 'live', 'a row that kept a live result stays labelled live after refresh')
 
   let resolveOld
   const race = load({
@@ -224,7 +224,7 @@ const history = {
   assert.equal(warmed[0].key, 'tool:call_before_mount')
   assert.equal(warmed[0].result, 'warm')
   assert.equal(warmed[0].durationS, 1.25)
-  assert.equal(beforeMount.sandbox.sourceBadge(warmed[0]), 'Captured live')
+  assert.equal(beforeMount.sandbox.sourceBadge(warmed[0]), 'live')
 
   // A tool event can omit profile. Switching away and back must still find the
   // buffered result instead of silently filtering it out.
@@ -243,7 +243,7 @@ const history = {
   const returned = noProfile.sandbox.snapshotEntries()
   assert.equal(returned.length, 1)
   assert.equal(returned[0].result, '/tmp', 'profile-less live result must survive a session switch within one plugin run')
-  assert.equal(noProfile.sandbox.sourceBadge(returned[0]), 'Captured live')
+  assert.equal(noProfile.sandbox.sourceBadge(returned[0]), 'live')
 
   const tree = sandbox.TrajectoryPanel()
   assert.ok(tree)

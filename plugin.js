@@ -288,98 +288,137 @@ function sourceBadge(entry) {
 }
 
 function entryLabel(entry) {
-  if (entry.notice) return 'SYSTEM'
+  if (entry.notice) return 'system'
   return entry.kind
 }
 
-function Section({ title, subtitle, children, className }) {
-  return jsxs('section', {
-    className: `rounded-md border border-(--ui-stroke-secondary) bg-(--ui-surface-background) p-2.5 ${className ?? ''}`,
-    children: [
-      jsxs('div', { className: 'mb-1.5 flex items-baseline gap-2', children: [
-        jsx('h3', { className: 'text-[0.75rem] font-medium text-(--ui-text-primary)', children: title }),
-        subtitle ? jsx('span', { className: 'text-[0.6875rem] text-(--ui-text-tertiary)', children: subtitle }) : null
-      ] }),
-      children
-    ]
-  })
+const PREVIEW_LIMIT = 140
+
+/** The one line (or two) a closed row shows for its content. */
+function previewOf(entry) {
+  if (entry.kind === 'tool') return entry.args || statusText(entry) || ''
+  if (entry.text) return entry.text
+  if (entry.commentary) return `Commentary: ${entry.commentary}`
+  if (entry.reasoning) return `Thinking: ${entry.reasoning}`
+  return ''
 }
 
-function hasDetailOf(entry) {
-  return entry.kind === 'tool'
-    ? Boolean(entry.args) || entry.resultAvailable
-    : Boolean(entry.text || entry.commentary || entry.reasoning)
+/** Everything the open row reveals, in reading order. */
+function detailSectionsOf(entry) {
+  if (entry.kind === 'tool') {
+    const sections = []
+    if (entry.args) sections.push({ label: 'Input', text: entry.args, mono: true })
+    sections.push({
+      label: 'Output',
+      text: entry.resultAvailable ? entry.result || '(empty output)' : 'Tool output is not available for this record.',
+      mono: true
+    })
+    return sections
+  }
+  const sections = []
+  if (entry.text) {
+    const label = entry.notice ? 'Context' : entry.kind === 'assistant' ? 'Response' : null
+    sections.push({ label, text: entry.text, mono: false })
+  }
+  if (entry.commentary) sections.push({ label: 'Commentary', text: entry.commentary, mono: false })
+  if (entry.reasoning) sections.push({ label: 'Thinking', text: entry.reasoning, mono: false })
+  return sections
 }
 
 /** Whether a row can open, and the label that affordance announces. */
 function disclosureOf(entry) {
-  return hasDetailOf(entry) ? { expandable: true, label: 'Expand' } : { expandable: false, label: '' }
+  const sections = detailSectionsOf(entry)
+  if (sections.length === 0) return { expandable: false, label: '' }
+  const preview = previewOf(entry)
+  const extra = entry.kind !== 'tool' && Boolean(entry.reasoning || entry.commentary)
+  const long = preview.length > PREVIEW_LIMIT
+  return entry.kind === 'tool' || extra || long
+    ? { expandable: true, label: 'Expand' }
+    : { expandable: false, label: '' }
+}
+
+function roleClassOf(entry) {
+  if (entry.notice) return 'text-(--ui-text-tertiary)'
+  if (entry.kind === 'user') return 'text-(--ui-accent)'
+  if (entry.kind === 'tool') return 'text-(--ui-text-secondary)'
+  return 'text-(--ui-text-tertiary)'
+}
+
+function clampStyle(lines) {
+  return {
+    display: '-webkit-box',
+    WebkitBoxOrient: 'vertical',
+    WebkitLineClamp: String(lines),
+    overflow: 'hidden'
+  }
 }
 
 function EntryRow({ entry }) {
   const [open, setOpen] = useState(false)
   const isTool = entry.kind === 'tool'
   const disclosure = disclosureOf(entry)
-  const hasDetail = disclosure.expandable
+  const preview = previewOf(entry)
+  const sections = detailSectionsOf(entry)
   const time = typeof entry.at === 'number' ? new Date(entry.at).toLocaleTimeString() : ''
-  const headerClass = 'flex w-full items-baseline gap-2 text-left'
-  const headerChildren = [
-    jsx('span', { className: 'shrink-0 text-[0.6875rem] text-(--ui-text-tertiary)', children: disclosure.expandable ? (open ? '▾' : '▸') : '' }),
-    jsx('span', { className: 'shrink-0 text-[0.6875rem] text-(--ui-text-tertiary)', children: entryLabel(entry) }),
-    jsx('span', { className: 'min-w-0 truncate font-mono text-[0.75rem] text-(--ui-text-primary)', children: isTool ? entry.name || 'tool' : 'message' }),
-    sourceBadge(entry)
-      ? jsx('span', { className: 'shrink-0 rounded border border-(--ui-stroke-tertiary) px-1 text-[0.625rem] text-(--ui-text-tertiary)', children: sourceBadge(entry) })
-      : null,
-    time ? jsx('span', { className: 'ml-auto shrink-0 text-[0.6875rem] text-(--ui-text-tertiary)', children: time }) : null,
-    isTool && entry.durationS !== null
-      ? jsx('span', { className: 'shrink-0 text-[0.6875rem] text-(--ui-text-tertiary)', children: `${entry.durationS.toFixed(2)}s` })
+  const badge = sourceBadge(entry)
+  const meta = [
+    time,
+    isTool && entry.durationS !== null ? `${entry.durationS.toFixed(2)}s` : ''
+  ].filter(Boolean).join(' · ')
+
+  const body = [
+    jsxs('div', { className: 'flex items-baseline gap-2', children: [
+      jsx('span', { className: `w-12 shrink-0 text-[0.6875rem] ${roleClassOf(entry)}`, children: entryLabel(entry) }),
+      jsxs('span', { className: 'flex min-w-0 flex-1 items-baseline gap-1.5', children: [
+        jsx('span', { className: 'min-w-0 truncate font-mono text-[0.75rem] text-(--ui-text-primary)', children: isTool ? entry.name || 'tool' : 'message' }),
+        disclosure.expandable
+          ? jsx('span', { className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary)', children: open ? '▾' : '▸' })
+          : null
+      ] }),
+      meta ? jsx('span', { className: 'shrink-0 tabular-nums text-[0.6875rem] text-(--ui-text-tertiary)', children: meta }) : null
+    ] }),
+    preview
+      ? jsxs('div', { className: 'mt-0.5 flex items-baseline gap-1.5 pl-14', children: [
+          badge
+            ? jsx('span', { className: 'shrink-0 rounded-sm border border-(--ui-stroke-tertiary) px-1 text-[0.625rem] text-(--ui-text-tertiary)', children: badge })
+            : null,
+          jsx('div', {
+            className: isTool
+              ? 'min-w-0 truncate font-mono text-[0.6875rem] text-(--ui-text-tertiary)'
+              : 'min-w-0 text-[0.75rem] text-(--ui-text-secondary)',
+            style: open || isTool ? undefined : clampStyle(2),
+            title: preview,
+            children: preview
+          })
+        ] })
       : null
   ]
+
   return jsxs('div', {
-    className: 'rounded-md border border-(--ui-stroke-secondary) bg-(--ui-surface-background) px-2 py-1.5',
+    className: 'border-b border-(--ui-stroke-secondary)',
     children: [
       disclosure.expandable
         ? jsx('button', {
             type: 'button',
             'aria-expanded': open,
             'aria-label': `${open ? 'Collapse' : 'Expand'} ${entryLabel(entry)}`,
-            className: `${headerClass} rounded-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--ui-accent)`,
+            className: 'w-full px-1 py-1.5 text-left hover:bg-(--ui-bg-tertiary) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--ui-accent)',
             onClick: () => setOpen(value => !value),
-            children: headerChildren
+            children: body
           })
-        : jsx('div', { className: headerClass, children: headerChildren }),
-      !open && isTool && entry.args
-        ? jsx('div', { className: 'mt-0.5 truncate font-mono text-[0.6875rem] text-(--ui-text-tertiary)', title: entry.args, children: entry.args })
-        : null,
-      !open || !hasDetail
-        ? jsx('div', { className: 'mt-0.5 break-words text-[0.75rem] text-(--ui-text-secondary)', children: statusText(entry) || '—' })
-        : null,
-      open
-        ? jsxs('div', { className: 'mt-1 flex flex-col gap-1 border-t border-(--ui-stroke-secondary) pt-1', children: [
-          !isTool && entry.text
-            ? jsx('div', { className: 'whitespace-pre-wrap break-words text-[0.75rem] text-(--ui-text-secondary)', children: entry.text })
-            : null,
-          !isTool && entry.commentary
-            ? jsx('div', { className: 'whitespace-pre-wrap break-words text-[0.75rem] text-(--ui-text-tertiary)', children: `Commentary: ${entry.commentary}` })
-            : null,
-          !isTool && entry.reasoning
-            ? jsx('div', { className: 'whitespace-pre-wrap break-words text-[0.75rem] text-(--ui-text-tertiary)', children: `Thinking: ${entry.reasoning}` })
-            : null,
-          isTool && entry.args
-            ? jsxs('div', { className: 'flex flex-col gap-0.5', children: [
-                jsx('div', { className: 'text-[0.6875rem] text-(--ui-text-tertiary)', children: 'Input' }),
-                jsx('div', { className: 'break-all font-mono text-[0.6875rem] text-(--ui-text-secondary)', children: entry.args })
-              ] })
-            : null,
-          isTool
-            ? jsxs('div', { className: 'flex flex-col gap-0.5', children: [
-                jsx('div', { className: 'text-[0.6875rem] text-(--ui-text-tertiary)', children: 'Output' }),
-                jsx('div', { className: 'whitespace-pre-wrap break-words font-mono text-[0.6875rem] text-(--ui-text-secondary)', children: entry.resultAvailable
-                  ? entry.result || '(empty output)'
-                  : 'Tool output is not available for this record.' })
-              ] })
-            : null
-        ] })
+        : jsx('div', { className: 'px-1 py-1.5', children: body }),
+      open && sections.length > 0
+        ? jsx('div', { className: 'flex flex-col gap-1.5 border-t border-(--ui-stroke-secondary) px-1 pb-2 pl-14 pt-1.5', children: sections.map((section, index) => jsxs('div', { className: 'flex flex-col gap-0.5', children: [
+            section.label
+              ? jsx('div', { className: 'text-[0.6875rem] text-(--ui-text-tertiary)', children: section.label })
+              : null,
+            jsx('div', {
+              className: section.mono
+                ? 'whitespace-pre-wrap break-words font-mono text-[0.6875rem] text-(--ui-text-secondary)'
+                : 'whitespace-pre-wrap break-words text-[0.75rem] text-(--ui-text-secondary)',
+              children: section.text
+            })
+          ] }, index)) })
         : null
     ]
   })
@@ -402,28 +441,29 @@ function TrajectoryPanel() {
   }
 
   const entries = state.sessionId === sessionId ? state.entries : []
-  return jsxs('div', { className: 'flex h-full flex-col gap-2 overflow-auto bg-(--ui-surface-background) p-2 text-(--ui-text-primary)', children: [
-    jsxs('div', { className: 'flex items-baseline gap-2', children: [
+  return jsxs('div', { className: 'flex h-full flex-col overflow-auto bg-(--ui-surface-background) text-(--ui-text-primary)', children: [
+    jsxs('div', { className: 'sticky top-0 z-10 flex shrink-0 items-center gap-2 border-b border-(--ui-stroke-secondary) bg-(--ui-surface-background) px-2 py-1.5', children: [
       jsx('div', { className: 'text-sm font-semibold', children: 'Trajectory' }),
+      jsx('span', { className: 'text-[0.6875rem] tabular-nums text-(--ui-text-tertiary)', children: entries.length > 0 ? `${entries.length} records` : '' }),
       jsx('button', {
         type: 'button',
         disabled: state.loading,
-        className: 'ml-auto min-h-8 rounded-md border border-(--ui-stroke-secondary) px-2.5 py-1 text-[0.75rem] text-(--ui-text-secondary) enabled:hover:bg-(--ui-bg-tertiary) disabled:opacity-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--ui-accent)',
+        className: 'ml-auto min-h-7 rounded-md border border-(--ui-stroke-secondary) px-2 text-[0.75rem] text-(--ui-text-secondary) enabled:hover:bg-(--ui-bg-tertiary) disabled:opacity-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--ui-accent)',
         onClick: () => { void loadTrajectory(sessionId, profile, { replace: false }) },
         children: state.loading ? 'Refreshing…' : 'Refresh'
       })
     ] }),
-    jsx('p', { className: 'text-[0.75rem] text-(--ui-text-secondary)', children: 'Tool results are kept in memory and disappear when the plugin reloads or Hermes restarts. History keeps call arguments, not most outputs.' }),
+    jsx('p', { className: 'shrink-0 px-2 py-1 text-[0.6875rem] text-(--ui-text-tertiary)', children: 'Tool output is memory-only; history keeps arguments, not outputs.' }),
     state.loading && entries.length === 0
-      ? jsx('div', { className: 'text-[0.75rem] text-(--ui-text-tertiary)', children: 'Reading session history…' })
+      ? jsx('div', { className: 'px-2 py-2 text-[0.75rem] text-(--ui-text-tertiary)', children: 'Reading session history…' })
       : entries.length === 0
-        ? jsx('div', { className: 'text-[0.75rem] text-(--ui-text-tertiary)', children: state.notice || 'No records yet.' })
-        : jsx('div', { className: 'flex flex-col gap-1', children: entries.map(entry => jsx(EntryRow, { entry }, entry.key)) }),
+        ? jsx('div', { className: 'px-2 py-2 text-[0.75rem] text-(--ui-text-tertiary)', children: state.notice || 'No records yet.' })
+        : jsx('div', { className: 'border-t border-(--ui-stroke-secondary)', children: entries.map(entry => jsx(EntryRow, { entry }, entry.key)) }),
     state.activity === 'generating'
-      ? jsx('div', { className: 'text-[0.625rem] text-(--ui-accent)', children: 'Assistant is responding…' })
+      ? jsx('div', { className: 'px-2 py-1 text-[0.6875rem] text-(--ui-accent)', children: 'Assistant is responding…' })
       : null,
     state.notice && entries.length > 0
-      ? jsx('div', { className: 'text-[0.625rem] text-(--ui-text-quaternary)', children: state.notice })
+      ? jsx('div', { className: 'px-2 py-1 text-[0.6875rem] text-(--ui-text-quaternary)', children: state.notice })
       : null
   ] })
 }

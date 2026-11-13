@@ -279,6 +279,16 @@ const history = {
   assert.equal(cappedEntries.at(-1).key, 'row:150')
   assert.equal(capped.sandbox.isNearBottom(600, 1000, 400), true, 'at the bottom means scrolled to the end')
   assert.equal(capped.sandbox.isNearBottom(0, 1000, 400), false, 'reading older rows is not the bottom')
+  const gaps = [
+    { key: 'a', at: 1000 },
+    { key: 'b', at: 2500 },
+    { key: 'c', at: null },
+    { key: 'd', at: 5000 }
+  ]
+  assert.equal(capped.sandbox.gapBefore(gaps, 0), null, 'first event has no previous step')
+  assert.equal(capped.sandbox.gapBefore(gaps, 1), 1.5)
+  assert.equal(capped.sandbox.gapBefore(gaps, 2), null, 'untimed rows do not invent a step duration')
+  assert.equal(capped.sandbox.gapBefore(gaps, 3), 2.5, 'gap measures from the nearest earlier timed event')
   assert.equal(capped.sandbox.toolFailure({ success: false }), true)
   assert.equal(capped.sandbox.toolFailure({ error: 'boom' }), true)
   assert.equal(capped.sandbox.toolFailure({ success: true }), false)

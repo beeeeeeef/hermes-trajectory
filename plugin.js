@@ -295,6 +295,18 @@ function isNearBottom(scrollTop, scrollHeight, clientHeight, threshold = 48) {
   return scrollHeight - (scrollTop + clientHeight) <= threshold
 }
 
+/** Seconds since the nearest earlier timed event; null when either side is untimed. */
+function gapBefore(entries, index) {
+  const current = entries[index]
+  if (typeof current?.at !== 'number') return null
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    if (typeof entries[cursor]?.at === 'number') {
+      return Math.max(0, (current.at - entries[cursor].at) / 1000)
+    }
+  }
+  return null
+}
+
 function sourceBadge(entry) {
   if (entry.kind !== 'tool') return ''
   if (entry.origin === 'live') return 'live'
@@ -374,9 +386,10 @@ function roleToneOf(entry) {
   return 'var(--ui-text-tertiary)'
 }
 
-function EntryRow({ entry }) {
+function EntryRow({ entry, gapS }) {
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const isTool = entry.kind === 'tool'
   const disclosure = disclosureOf(entry)
   const preview = previewOf(entry)
@@ -392,8 +405,14 @@ function EntryRow({ entry }) {
   useEffect(() => {
     if (open) {
       setMounted(true)
-      return
+      if (typeof requestAnimationFrame !== 'function') {
+        setExpanded(true)
+        return
+      }
+      const frame = requestAnimationFrame(() => setExpanded(true))
+      return () => cancelAnimationFrame(frame)
     }
+    setExpanded(false)
     if (!disclosure.expandable) return
     const timer = setTimeout(() => setMounted(false), 180)
     return () => clearTimeout(timer)
@@ -422,7 +441,10 @@ function EntryRow({ entry }) {
           })
         : null,
       duration
-        ? jsx('span', { className: 'shrink-0 text-[0.625rem] tabular-nums text-(--ui-text-tertiary)', children: duration })
+        ? jsx('span', { title: 'Tool duration', className: 'shrink-0 text-[0.625rem] tabular-nums text-(--ui-text-tertiary)', children: duration })
+        : null,
+      gapS !== null
+        ? jsx('span', { title: 'Time since the previous event', className: 'shrink-0 text-[0.625rem] tabular-nums text-(--ui-text-quaternary)', children: `+${gapS.toFixed(1)}s` })
         : null,
       disclosure.expandable
         ? jsx('span', { className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary)', children: open ? '▾' : '▸' })
@@ -469,10 +491,16 @@ function EntryRow({ entry }) {
         ? jsx('div', {
             style: {
               display: 'grid',
-              gridTemplateRows: open ? '1fr' : '0fr',
+              gridTemplateRows: expanded ? '1fr' : '0fr',
               transition: reduceMotion ? 'none' : 'grid-template-rows 180ms ease'
             },
-            children: jsx('div', { style: { overflow: 'hidden', minHeight: 0 }, children: jsxs('div', { className: 'mb-1 rounded-lg bg-(--ui-bg-tertiary) px-2 py-1.5 ml-[4.5rem]', children: sections.map((section, index) => jsxs('div', { className: 'flex flex-col gap-0.5', children: [
+            children: jsx('div', { style: { overflow: 'hidden', minHeight: 0 }, children: jsxs('div', {
+              className: 'mb-1 rounded-[10px] px-2 py-1.5 ml-[4.5rem]',
+              style: {
+                backgroundColor: 'color-mix(in srgb, var(--ui-text-tertiary) 8%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--ui-text-tertiary) 10%, transparent)'
+              },
+              children: sections.map((section, index) => jsxs('div', { className: 'flex flex-col gap-0.5', children: [
               section.label
                 ? jsx('div', { className: 'text-[0.625rem] text-(--ui-text-tertiary)', children: section.label })
                 : null,
@@ -548,7 +576,7 @@ function TrajectoryPanel() {
               jsx('div', { className: 'text-[0.75rem] text-(--ui-text-secondary)', children: 'No records yet.' }),
               jsx('div', { className: 'text-[0.6875rem] text-(--ui-text-tertiary)', children: 'Send a message to start the ledger.' })
             ] })
-        : jsx('div', { className: 'px-1 pt-1', children: entries.map(entry => jsx(EntryRow, { entry }, entry.key)) }),
+        : jsx('div', { className: 'px-1 pt-1', children: entries.map((entry, index) => jsx(EntryRow, { entry, gapS: gapBefore(entries, index) }, entry.key)) }),
     state.activity === 'generating'
       ? jsx('div', { className: 'px-2 py-1 text-[0.6875rem] text-(--ui-accent)', children: 'Assistant is responding…' })
       : null,

@@ -314,6 +314,18 @@ const history = {
   await shrinking.sandbox.loadTrajectory('runtime-1', 'tech')
   assert.equal(shrinking.sandbox.snapshotEntries().length, 1, 'removed history rows must not survive a refresh')
   assert.equal(shrinking.sandbox.snapshotEntries()[0].key, 'row:503')
+
+  let finishOlder
+  const olderReply = new Promise(resolve => { finishOlder = resolve })
+  let refreshes = 0
+  const racing = load({ 'session.history': async () => ++refreshes === 1
+    ? olderReply
+    : { count: 1, messages: [{ role: 'assistant', row_id: 900, timestamp: 1793525410, text: 'newer' }] } })
+  const staleRead = racing.sandbox.loadTrajectory('runtime-1', 'tech')
+  await racing.sandbox.loadTrajectory('runtime-1', 'tech')
+  finishOlder({ count: 1, messages: [{ role: 'assistant', row_id: 901, timestamp: 1793525400, text: 'stale' }] })
+  await staleRead
+  assert.equal(racing.sandbox.snapshotEntries().some(entry => entry.key === 'row:901'), false, 'an older request may not overwrite a newer refresh')
   assert.equal(capped.sandbox.toolFailure({ success: false }), true)
   assert.equal(capped.sandbox.toolFailure({ error: 'boom' }), true)
   assert.equal(capped.sandbox.toolFailure({ success: true }), false)

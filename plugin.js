@@ -33,6 +33,7 @@ const $state = atom({ sessionId: null, profile: null, entries: [], notice: '', l
 // Captured before the pane mounts, or while another pane is active. Memory only.
 const $liveTools = atom({})
 const MAX_BUFFERED_TOOLS = 200
+let historyRequestGeneration = 0
 
 function clip(value, max) {
   const text = String(value ?? '').replace(/\s+/g, ' ').trim()
@@ -141,6 +142,7 @@ async function loadTrajectory(sessionId, profile, options = {}) {
   const request = options.request ?? host.request
   const replace = options.replace === true
   if (!sessionId) return false
+  const generation = ++historyRequestGeneration
   const previous = $state.get()
   const sameSession = previous.sessionId === sessionId && previous.profile === profile
   $state.set({
@@ -155,7 +157,7 @@ async function loadTrajectory(sessionId, profile, options = {}) {
     const result = await request('session.history', { session_id: sessionId, profile })
     const rows = Array.isArray(result?.messages) ? result.messages : []
     const current = $state.get()
-    if (current.sessionId !== sessionId || current.profile !== profile) return false
+    if (generation !== historyRequestGeneration || current.sessionId !== sessionId || current.profile !== profile) return false
     const sliceStart = Math.max(0, rows.length - MAX_ENTRIES)
     const historyEntries = rows.slice(sliceStart).map((row, offset) => fromHistoryRow(row, sliceStart + offset))
     const buffered = liveToolsFor(sessionId, profile)
@@ -172,7 +174,7 @@ async function loadTrajectory(sessionId, profile, options = {}) {
     return true
   } catch {
     const current = $state.get()
-    if (current.sessionId !== sessionId || current.profile !== profile) return false
+    if (generation !== historyRequestGeneration || current.sessionId !== sessionId || current.profile !== profile) return false
     $state.set({
       sessionId,
       profile,

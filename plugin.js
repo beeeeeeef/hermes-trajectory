@@ -8,7 +8,7 @@
  * 只读：不写盘、不联网、不直接访问数据库。
  */
 import { atom, host, useValue } from '@hermes/plugin-sdk'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 const ID = 'hermes-trajectory'
@@ -319,6 +319,12 @@ function latestLabel(count) {
   return `latest ${count}`
 }
 
+/** Scroll delta that keeps the clicked point under the pointer after a layout change. */
+function scrollAdjustment(anchor, rowTop) {
+  if (!anchor) return 0
+  return rowTop - (anchor.pointerY - anchor.offset)
+}
+
 /** Seconds since the nearest earlier timed event; null when either side is untimed. */
 function gapBefore(entries, index) {
   const current = entries[index]
@@ -414,6 +420,8 @@ function EntryRow({ entry, gapS }) {
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const rowRef = useRef(null)
+  const anchorRef = useRef(null)
   const isTool = entry.kind === 'tool'
   const disclosure = disclosureOf(entry)
   const preview = previewOf(entry)
@@ -441,6 +449,32 @@ function EntryRow({ entry, gapS }) {
     const timer = setTimeout(() => setMounted(false), 180)
     return () => clearTimeout(timer)
   }, [open, disclosure.expandable])
+
+  const toggleOpen = event => {
+    const element = rowRef.current
+    const rect = element?.getBoundingClientRect?.()
+    const pointerY = typeof event?.clientY === 'number' ? event.clientY : rect?.top
+    anchorRef.current = rect && Number.isFinite(pointerY)
+      ? { pointerY, offset: pointerY - rect.top }
+      : null
+    if (open) {
+      setExpanded(false)
+      setOpen(false)
+    } else {
+      setOpen(true)
+    }
+  }
+
+  useLayoutEffect(() => {
+    const element = rowRef.current
+    if (!element || !anchorRef.current) return
+    const rowTop = element.getBoundingClientRect().top
+    const delta = scrollAdjustment(anchorRef.current, rowTop)
+    anchorRef.current = null
+    if (Math.abs(delta) < 0.5) return
+    const scroller = element.closest?.('[data-trajectory-scroll]')
+    if (scroller) scroller.scrollTop += delta
+  }, [open, expanded])
 
   const content = [
     jsxs('div', { className: 'flex items-center gap-2', children: [
@@ -493,6 +527,7 @@ function EntryRow({ entry, gapS }) {
 
   const startsTurn = entry.kind === 'user' && !entry.notice
   return jsxs('div', {
+    ref: rowRef,
     className: 'mx-1 mb-1.5 rounded-xl border bg-(--ui-surface-background) px-2 py-1',
     style: {
       marginTop: startsTurn ? '10px' : undefined,
@@ -507,11 +542,11 @@ function EntryRow({ entry, gapS }) {
             'aria-expanded': open,
             'aria-label': `${open ? 'Collapse' : 'Expand'} ${entryLabel(entry)}: ${preview.slice(0, 80)}`,
             className: 'block w-full rounded-lg hover:bg-(--ui-bg-tertiary) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--ui-accent)',
-            onClick: () => setOpen(value => !value),
+            onClick: toggleOpen,
             onKeyDown: event => {
               if (event.key === 'Escape' && open) {
                 event.preventDefault()
-                setOpen(false)
+                toggleOpen(event)
               }
             },
             children: body
@@ -577,6 +612,8 @@ function TrajectoryPanel() {
   const toolCount = entries.filter(entry => entry.kind === 'tool').length
   return jsxs('div', {
     ref: scrollRef,
+    'data-trajectory-scroll': 'true',
+    style: { overflowAnchor: 'none' },
     className: 'flex h-full flex-col overflow-auto bg-(--ui-surface-background) text-(--ui-text-primary)',
     onScroll: event => {
       const element = event.currentTarget

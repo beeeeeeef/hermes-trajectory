@@ -34,6 +34,9 @@ function load(requests) {
     useState: initial => [initial, () => {}],
     useRef: initial => ({ current: initial }),
     useEffect: () => {},
+    useLayoutEffect: () => {},
+    requestAnimationFrame: () => 0,
+    cancelAnimationFrame: () => {},
     setTimeout: () => 0,
     clearTimeout: () => {},
     setInterval: () => 0,
@@ -306,6 +309,9 @@ const history = {
   assert.equal(capped.sandbox.formatGap(90000), '1d 1h')
   assert.equal(capped.sandbox.latestLabel(100), 'latest 100')
   assert.equal(capped.sandbox.latestLabel(8), 'latest 8')
+  assert.equal(capped.sandbox.scrollAdjustment(null, 100), 0)
+  assert.equal(capped.sandbox.scrollAdjustment({ pointerY: 200, offset: 10 }, 100), -90, 'keep the clicked point under the pointer')
+  assert.equal(capped.sandbox.scrollAdjustment({ pointerY: 200, offset: 10 }, 190), 0, 'already anchored means no scroll correction')
   assert.equal(capped.sandbox.shouldShowPreview(false, 'text'), true, 'closed rows show their summary')
   assert.equal(capped.sandbox.shouldShowPreview(true, 'text'), false, 'open rows must not repeat the summary above the detail')
 

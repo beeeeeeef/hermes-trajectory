@@ -295,6 +295,11 @@ function isNearBottom(scrollTop, scrollHeight, clientHeight, threshold = 48) {
   return scrollHeight - (scrollTop + clientHeight) <= threshold
 }
 
+/** A closed row shows its summary; an open row already shows the full detail. */
+function shouldShowPreview(open, preview) {
+  return !open && Boolean(preview)
+}
+
 /** Seconds since the nearest earlier timed event; null when either side is untimed. */
 function gapBefore(entries, index) {
   const current = entries[index]
@@ -450,12 +455,12 @@ function EntryRow({ entry, gapS }) {
         ? jsx('span', { className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary)', children: open ? '▾' : '▸' })
         : null
     ] }),
-    preview
+    shouldShowPreview(open, preview)
       ? jsx('div', { className: 'mt-1 flex items-baseline pl-[4.5rem]', children: jsx('div', {
           className: isTool
             ? 'min-w-0 truncate font-mono text-[0.6875rem] text-(--ui-text-tertiary)'
             : 'min-w-0 text-[0.75rem] text-(--ui-text-secondary)',
-          style: open || isTool ? undefined : clampStyle(2),
+          style: isTool ? undefined : clampStyle(2),
           title: preview,
           children: preview
         }) })

@@ -277,6 +277,16 @@ const history = {
   assert.equal(cappedEntries.length, 100, 'only the latest 100 records stay in memory')
   assert.equal(cappedEntries[0].key, 'row:51')
   assert.equal(cappedEntries.at(-1).key, 'row:150')
+  const fallbackRows = Array.from({ length: 120 }, (_, index) => ({
+    role: 'assistant',
+    timestamp: 1793525291.5 + index,
+    text: `fallback ${index}`
+  }))
+  const fallback = load({ 'session.history': async () => ({ count: 120, messages: fallbackRows }) })
+  await fallback.sandbox.loadTrajectory('runtime-1', 'tech')
+  const fallbackEntries = fallback.sandbox.snapshotEntries()
+  assert.equal(fallbackEntries[0].key, 'row:history-20', 'fallback keys keep original positions after slicing')
+  assert.equal(fallbackEntries.at(-1).key, 'row:history-119')
   assert.equal(capped.sandbox.isNearBottom(600, 1000, 400), true, 'at the bottom means scrolled to the end')
   assert.equal(capped.sandbox.isNearBottom(0, 1000, 400), false, 'reading older rows is not the bottom')
   const gaps = [
@@ -291,6 +301,19 @@ const history = {
   assert.equal(capped.sandbox.gapBefore(gaps, 3), 2.5, 'gap measures from the nearest earlier timed event')
   assert.equal(capped.sandbox.shouldShowPreview(false, 'text'), true, 'closed rows show their summary')
   assert.equal(capped.sandbox.shouldShowPreview(true, 'text'), false, 'open rows must not repeat the summary above the detail')
+
+  const shrinkingRows = [
+    { role: 'user', row_id: 501, timestamp: 1793525291.5, text: 'one' },
+    { role: 'assistant', row_id: 502, timestamp: 1793525293.5, text: 'two' },
+    { role: 'user', row_id: 503, timestamp: 1793525295.5, text: 'three' }
+  ]
+  const shrinking = load({ 'session.history': async () => ({ count: shrinkingRows.length, messages: [...shrinkingRows] }) })
+  await shrinking.sandbox.loadTrajectory('runtime-1', 'tech')
+  assert.equal(shrinking.sandbox.snapshotEntries().length, 3)
+  shrinkingRows.splice(0, 2)
+  await shrinking.sandbox.loadTrajectory('runtime-1', 'tech')
+  assert.equal(shrinking.sandbox.snapshotEntries().length, 1, 'removed history rows must not survive a refresh')
+  assert.equal(shrinking.sandbox.snapshotEntries()[0].key, 'row:503')
   assert.equal(capped.sandbox.toolFailure({ success: false }), true)
   assert.equal(capped.sandbox.toolFailure({ error: 'boom' }), true)
   assert.equal(capped.sandbox.toolFailure({ success: true }), false)

@@ -156,14 +156,15 @@ async function loadTrajectory(sessionId, profile, options = {}) {
     const rows = Array.isArray(result?.messages) ? result.messages : []
     const current = $state.get()
     if (current.sessionId !== sessionId || current.profile !== profile) return false
-    const historyEntries = rows.slice(-MAX_ENTRIES).map(fromHistoryRow)
+    const sliceStart = Math.max(0, rows.length - MAX_ENTRIES)
+    const historyEntries = rows.slice(sliceStart).map((row, offset) => fromHistoryRow(row, sliceStart + offset))
     const buffered = liveToolsFor(sessionId, profile)
+    // A successful history read is the authoritative set. Merge only buffered
+    // live tool detail into it; never carry forward rows the history removed.
     $state.set({
       sessionId,
       profile,
-      entries: replace
-        ? mergeEntries(historyEntries.slice(-MAX_ENTRIES), buffered)
-        : mergeEntries(current.entries, [...historyEntries, ...buffered]),
+      entries: mergeEntries(historyEntries, buffered),
       notice: rows.length === 0 ? 'No records in this session yet.' : '',
       loading: false,
       activity: current.activity ?? 'idle'
@@ -418,7 +419,7 @@ function EntryRow({ entry, gapS }) {
       return () => cancelAnimationFrame(frame)
     }
     setExpanded(false)
-    if (!disclosure.expandable) return
+    if (!disclosure.expandable || !mounted) return
     const timer = setTimeout(() => setMounted(false), 180)
     return () => clearTimeout(timer)
   }, [open, disclosure.expandable])

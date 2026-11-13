@@ -8,11 +8,11 @@
  * 只读：不写盘、不联网、不直接访问数据库。
  */
 import { atom, host, useValue } from '@hermes/plugin-sdk'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { jsx, jsxs } from 'react/jsx-runtime'
 
 const ID = 'hermes-trajectory'
-const MAX_ENTRIES = 500
+const MAX_ENTRIES = 100
 
 // Hermes inserts a few synthetic `role: "user"` turns to steer the model.
 // They are not human input, but the history projection has no source field for
@@ -67,6 +67,7 @@ function fromHistoryRow(row, index) {
     args: isTool ? clip(typeof row?.args === 'object' ? JSON.stringify(row.args) : row?.args, 300) : '',
     result: historicalResult ? truncate(typeof row.content === 'string' ? row.content : JSON.stringify(row.content), 2000) : '',
     resultAvailable: Boolean(historicalResult),
+    failure: false,
     durationS: null,
     at: typeof row?.timestamp === 'number' ? row.timestamp * 1000 : null,
     origin: 'history'
@@ -97,6 +98,7 @@ function mergeEntries(existing, incoming) {
         args: previous.args || entry.args,
         result: previous.resultAvailable ? previous.result : entry.result,
         resultAvailable: previous.resultAvailable || entry.resultAvailable,
+        failure: previous.failure === true || entry.failure === true,
         durationS: previous.durationS ?? entry.durationS,
         status: previous.status ?? entry.status,
         origin: 'live'
@@ -154,7 +156,7 @@ async function loadTrajectory(sessionId, profile, options = {}) {
     const rows = Array.isArray(result?.messages) ? result.messages : []
     const current = $state.get()
     if (current.sessionId !== sessionId || current.profile !== profile) return false
-    const historyEntries = rows.map(fromHistoryRow)
+    const historyEntries = rows.slice(-MAX_ENTRIES).map(fromHistoryRow)
     const buffered = liveToolsFor(sessionId, profile)
     $state.set({
       sessionId,
@@ -253,6 +255,7 @@ function applyToolComplete(event) {
     args: previous?.args ?? clip(typeof payload.args === 'object' ? JSON.stringify(payload.args) : '', 300),
     result,
     resultAvailable: Object.prototype.hasOwnProperty.call(payload, 'result'),
+    failure: toolFailure(payload.result),
     durationS: typeof payload.duration_s === 'number' && Number.isFinite(payload.duration_s)
       ? payload.duration_s
       : null,
@@ -281,6 +284,17 @@ function statusTextOf(entry) {
   return statusText(entry)
 }
 
+/** Only structured evidence counts as a failed tool; result text is arbitrary. */
+function toolFailure(result) {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return false
+  if (result.success === false) return true
+  return typeof result.error === 'string' && result.error.trim().length > 0
+}
+
+function isNearBottom(scrollTop, scrollHeight, clientHeight, threshold = 48) {
+  return scrollHeight - (scrollTop + clientHeight) <= threshold
+}
+
 function sourceBadge(entry) {
   if (entry.kind !== 'tool') return ''
   if (entry.origin === 'live') return 'live'
@@ -291,12 +305,6 @@ function sourceTitle(entry) {
   if (entry.kind !== 'tool') return ''
   if (entry.origin === 'live') return 'Result captured while the plugin was running'
   return entry.resultAvailable ? 'Output came from the session history' : 'Arguments came from the session history; output was not stored'
-}
-
-function sourceTone(entry) {
-  return entry.origin === 'live'
-    ? 'border-(--ui-accent) text-(--ui-accent)'
-    : 'border-(--ui-stroke-secondary) text-(--ui-text-tertiary)'
 }
 
 function entryLabel(entry) {
@@ -349,13 +357,6 @@ function disclosureOf(entry) {
     : { expandable: false, label: '' }
 }
 
-function roleClassOf(entry) {
-  if (entry.notice) return 'text-(--ui-text-tertiary)'
-  if (entry.kind === 'user') return 'text-(--ui-accent)'
-  if (entry.kind === 'tool') return 'text-(--ui-text-secondary)'
-  return 'text-(--ui-text-tertiary)'
-}
-
 function clampStyle(lines) {
   return {
     display: '-webkit-box',
@@ -365,8 +366,17 @@ function clampStyle(lines) {
   }
 }
 
+function roleToneOf(entry) {
+  if (entry.notice) return 'var(--ui-text-tertiary)'
+  if (entry.kind === 'user') return 'var(--ui-accent)'
+  if (entry.kind === 'assistant') return 'var(--ui-blue)'
+  if (entry.kind === 'tool') return 'var(--ui-orange)'
+  return 'var(--ui-text-tertiary)'
+}
+
 function EntryRow({ entry }) {
   const [open, setOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const isTool = entry.kind === 'tool'
   const disclosure = disclosureOf(entry)
   const preview = previewOf(entry)
@@ -374,16 +384,40 @@ function EntryRow({ entry }) {
   const source = sourceBadge(entry)
   const time = typeof entry.at === 'number' ? new Date(entry.at).toLocaleTimeString() : ''
   const duration = isTool && entry.durationS !== null ? `${entry.durationS.toFixed(2)}s` : ''
-  const gridStyle = { display: 'grid', gridTemplateColumns: '56px minmax(0,1fr)' }
+  const accent = roleToneOf(entry)
+  const reduceMotion = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const gridStyle = { display: 'grid', gridTemplateColumns: '52px minmax(0,1fr)' }
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      return
+    }
+    if (!disclosure.expandable) return
+    const timer = setTimeout(() => setMounted(false), 180)
+    return () => clearTimeout(timer)
+  }, [open, disclosure.expandable])
 
   const content = [
-    jsxs('div', { className: 'flex items-baseline gap-2', children: [
-      jsx('span', { className: `w-14 shrink-0 text-[0.6875rem] ${roleClassOf(entry)}`, children: entryLabel(entry) }),
+    jsxs('div', { className: 'flex items-center gap-2', children: [
+      jsx('span', {
+        className: 'inline-flex w-16 shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 text-[0.6875rem] text-(--ui-text-primary)',
+        style: { backgroundColor: `color-mix(in srgb, ${accent} 14%, transparent)` },
+        children: [
+          jsx('span', { 'aria-hidden': 'true', style: { width: '5px', height: '5px', borderRadius: '999px', flexShrink: 0, backgroundColor: accent } }),
+          jsx('span', { className: 'truncate', children: entryLabel(entry) })
+        ]
+      }),
       jsx('span', { className: 'min-w-0 flex-1 truncate font-mono text-[0.75rem] text-(--ui-text-primary)', children: isTool ? entry.name || 'tool' : 'message' }),
+      entry.failure
+        ? jsx('span', { className: 'shrink-0 rounded-full px-1.5 py-0.5 text-[0.625rem]', style: { backgroundColor: 'color-mix(in srgb, var(--ui-red) 14%, transparent)', color: 'var(--ui-red)' }, children: 'failed' })
+        : null,
       source
         ? jsx('span', {
             title: sourceTitle(entry),
-            className: `shrink-0 rounded-sm border px-1 text-[0.625rem] ${sourceTone(entry)}`,
+            className: 'shrink-0 rounded-full px-1.5 py-0.5 text-[0.625rem] text-(--ui-text-tertiary)',
+            style: { backgroundColor: 'color-mix(in srgb, var(--ui-text-tertiary) 12%, transparent)' },
             children: source
           })
         : null,
@@ -395,7 +429,7 @@ function EntryRow({ entry }) {
         : null
     ] }),
     preview
-      ? jsx('div', { className: 'mt-0.5 flex items-baseline pl-14', children: jsx('div', {
+      ? jsx('div', { className: 'mt-1 flex items-baseline pl-[4.5rem]', children: jsx('div', {
           className: isTool
             ? 'min-w-0 truncate font-mono text-[0.6875rem] text-(--ui-text-tertiary)'
             : 'min-w-0 text-[0.75rem] text-(--ui-text-secondary)',
@@ -407,29 +441,38 @@ function EntryRow({ entry }) {
   ]
 
   const body = jsxs('div', { style: gridStyle, className: 'w-full text-left', children: [
-    jsx('span', { className: 'border-r border-(--ui-stroke-secondary) py-1.5 pr-2 text-right font-mono text-[0.625rem] tabular-nums text-(--ui-text-tertiary)', children: time }),
-    jsx('span', { className: 'min-w-0 px-2 py-1.5', children: content })
+    jsx('span', { className: 'py-1.5 pr-2 text-right font-mono text-[0.625rem] tabular-nums text-(--ui-text-tertiary)', children: time }),
+    jsx('span', { className: 'min-w-0 py-1.5 pl-1', children: content })
   ] })
 
   const startsTurn = entry.kind === 'user' && !entry.notice
   return jsxs('div', {
-    className: 'border-b border-(--ui-stroke-secondary)',
-    style: startsTurn ? { marginTop: '8px' } : undefined,
+    className: 'mx-1 mb-1.5 rounded-xl border bg-(--ui-surface-background) px-2 py-1',
+    style: {
+      marginTop: startsTurn ? '10px' : undefined,
+      borderColor: entry.failure
+        ? 'color-mix(in srgb, var(--ui-red) 45%, var(--ui-stroke-secondary))'
+        : 'var(--ui-stroke-secondary)'
+    },
     children: [
       disclosure.expandable
         ? jsx('button', {
             type: 'button',
             'aria-expanded': open,
             'aria-label': `${open ? 'Collapse' : 'Expand'} ${entryLabel(entry)}: ${preview.slice(0, 80)}`,
-            className: 'block w-full hover:bg-(--ui-bg-tertiary) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--ui-accent)',
+            className: 'block w-full rounded-lg hover:bg-(--ui-bg-tertiary) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--ui-accent)',
             onClick: () => setOpen(value => !value),
             children: body
           })
         : jsx('div', { className: 'block w-full', children: body }),
-      open && sections.length > 0
-        ? jsxs('div', { style: gridStyle, children: [
-            jsx('span', { className: 'border-r border-(--ui-stroke-secondary)' }),
-            jsx('div', { className: 'flex flex-col gap-1.5 border-t border-(--ui-stroke-secondary) bg-(--ui-bg-tertiary) px-2 pb-2 pl-16 pt-1.5', children: sections.map((section, index) => jsxs('div', { className: 'flex flex-col gap-0.5', children: [
+      disclosure.expandable && sections.length > 0 && (open || mounted)
+        ? jsx('div', {
+            style: {
+              display: 'grid',
+              gridTemplateRows: open ? '1fr' : '0fr',
+              transition: reduceMotion ? 'none' : 'grid-template-rows 180ms ease'
+            },
+            children: jsx('div', { style: { overflow: 'hidden', minHeight: 0 }, children: jsxs('div', { className: 'mb-1 rounded-lg bg-(--ui-bg-tertiary) px-2 py-1.5 ml-[4.5rem]', children: sections.map((section, index) => jsxs('div', { className: 'flex flex-col gap-0.5', children: [
               section.label
                 ? jsx('div', { className: 'text-[0.625rem] text-(--ui-text-tertiary)', children: section.label })
                 : null,
@@ -439,8 +482,8 @@ function EntryRow({ entry }) {
                   : 'whitespace-pre-wrap break-words text-[0.75rem] text-(--ui-text-secondary)',
                 children: section.text
               })
-            ] }, index)) })
-          ] })
+            ] }, index)) }) })
+          })
         : null
     ]
   })
@@ -450,10 +493,19 @@ function TrajectoryPanel() {
   const state = useValue($state)
   const sessionId = useValue(host.state.focusedSessionId)
   const profile = useValue(host.state.focusedSessionProfile)
+  const scrollRef = useRef(null)
+  const stickToBottom = useRef(true)
 
   useEffect(() => {
+    stickToBottom.current = true
     void loadTrajectory(sessionId, profile)
   }, [sessionId, profile])
+
+  const entries = state.sessionId === sessionId ? state.entries : []
+  useEffect(() => {
+    const element = scrollRef.current
+    if (element && stickToBottom.current) element.scrollTop = element.scrollHeight
+  }, [entries, sessionId, state.loading])
 
   if (!sessionId) {
     return jsxs('div', { className: 'flex h-full flex-col items-center justify-center gap-2 bg-(--ui-surface-background) px-4 text-center', children: [
@@ -462,9 +514,15 @@ function TrajectoryPanel() {
     ] })
   }
 
-  const entries = state.sessionId === sessionId ? state.entries : []
   const toolCount = entries.filter(entry => entry.kind === 'tool').length
-  return jsxs('div', { className: 'flex h-full flex-col overflow-auto bg-(--ui-surface-background) text-(--ui-text-primary)', children: [
+  return jsxs('div', {
+    ref: scrollRef,
+    className: 'flex h-full flex-col overflow-auto bg-(--ui-surface-background) text-(--ui-text-primary)',
+    onScroll: event => {
+      const element = event.currentTarget
+      stickToBottom.current = isNearBottom(element.scrollTop, element.scrollHeight, element.clientHeight)
+    },
+    children: [
     jsxs('div', { className: 'sticky top-0 z-10 shrink-0 bg-(--ui-surface-background)', children: [
       jsxs('div', { className: 'flex items-center gap-2 border-b border-(--ui-stroke-secondary) px-2 py-1.5', children: [
         jsx('div', { className: 'text-sm font-semibold', children: 'Trajectory' }),
@@ -479,10 +537,6 @@ function TrajectoryPanel() {
           onClick: () => { void loadTrajectory(sessionId, profile, { replace: false }) },
           children: state.loading ? 'Refreshing…' : 'Refresh'
         })
-      ] }),
-      jsxs('div', { style: { display: 'grid', gridTemplateColumns: '56px minmax(0,1fr)' }, className: 'border-b border-(--ui-stroke-secondary) text-[0.625rem] text-(--ui-text-tertiary)', children: [
-        jsx('span', { className: 'border-r border-(--ui-stroke-secondary) py-1 pr-2 text-right', children: 'time' }),
-        jsx('span', { className: 'px-2 py-1', children: 'event' })
       ] })
     ] }),
     state.loading && entries.length === 0
@@ -494,7 +548,7 @@ function TrajectoryPanel() {
               jsx('div', { className: 'text-[0.75rem] text-(--ui-text-secondary)', children: 'No records yet.' }),
               jsx('div', { className: 'text-[0.6875rem] text-(--ui-text-tertiary)', children: 'Send a message to start the ledger.' })
             ] })
-        : jsx('div', { children: entries.map(entry => jsx(EntryRow, { entry }, entry.key)) }),
+        : jsx('div', { className: 'px-1 pt-1', children: entries.map(entry => jsx(EntryRow, { entry }, entry.key)) }),
     state.activity === 'generating'
       ? jsx('div', { className: 'px-2 py-1 text-[0.6875rem] text-(--ui-accent)', children: 'Assistant is responding…' })
       : null,

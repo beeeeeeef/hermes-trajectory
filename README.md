@@ -16,11 +16,12 @@ A read-only Hermes Desktop plugin that shows one chat as a chronological ledger 
 | `tool.start` / `tool.complete` | live tool arguments, results, durations |
 | `message.start` / `message.complete` | turn activity and a history refresh trigger |
 
-It does **not** write files, make network requests, read a database, or store credentials. Entries stay in memory, capped at 500 per session.
+It does **not** write files, make network requests, read a database, or store credentials. Entries stay in memory, capped at the latest 100 per session.
 
 ## Known limits
 
 - Historical tool output cannot be recovered by this plugin. Only calls observed while it runs carry a result.
+- A live tool is marked **failed** only when its structured result says `success: false` or carries a non-empty `error`. Text that merely looks like an error is not classified.
 - Tool results are capped in memory (2,000 characters) and are lost when the plugin reloads.
 - The plugin shows content after it is available in `session.history`; it does not treat an empty `message.start` payload as the user's prompt.
 - There is no cross-device or complete durable-event replay.

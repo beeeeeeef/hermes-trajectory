@@ -32,7 +32,10 @@ function load(requests) {
     },
     useValue: value => (typeof value?.get === 'function' ? value.get() : value),
     useState: initial => [initial, () => {}],
+    useRef: initial => ({ current: initial }),
     useEffect: () => {},
+    setTimeout: () => 0,
+    clearTimeout: () => {},
     setInterval: () => 0,
     clearInterval: () => {},
     jsx: (type, props) => ({ type, props }),
@@ -261,6 +264,38 @@ const history = {
   const emptyDisclosure = sandbox.disclosureOf(sandbox.fromHistoryRow({ role: 'assistant', row_id: 11, text: '', timestamp: 1 }, 0))
   assert.equal(emptyDisclosure.expandable, false)
   assert.equal(emptyDisclosure.label, '')
+
+  const manyRows = Array.from({ length: 150 }, (_, index) => ({
+    role: index % 4 === 0 ? 'user' : 'assistant',
+    row_id: index + 1,
+    timestamp: 1793525291.5 + index,
+    text: `record ${index}`
+  }))
+  const capped = load({ 'session.history': async () => ({ count: 150, messages: manyRows }) })
+  await capped.sandbox.loadTrajectory('runtime-1', 'tech')
+  const cappedEntries = capped.sandbox.snapshotEntries()
+  assert.equal(cappedEntries.length, 100, 'only the latest 100 records stay in memory')
+  assert.equal(cappedEntries[0].key, 'row:51')
+  assert.equal(cappedEntries.at(-1).key, 'row:150')
+  assert.equal(capped.sandbox.isNearBottom(600, 1000, 400), true, 'at the bottom means scrolled to the end')
+  assert.equal(capped.sandbox.isNearBottom(0, 1000, 400), false, 'reading older rows is not the bottom')
+  assert.equal(capped.sandbox.toolFailure({ success: false }), true)
+  assert.equal(capped.sandbox.toolFailure({ error: 'boom' }), true)
+  assert.equal(capped.sandbox.toolFailure({ success: true }), false)
+  assert.equal(capped.sandbox.toolFailure('Error: boom'), false, 'plain text is not evidence of a failed tool')
+  capped.sandbox.applyToolComplete({
+    session_id: 'runtime-1',
+    profile: 'tech',
+    payload: { tool_id: 'call_failed', name: 'terminal', result: { success: false, error: 'boom' } }
+  })
+  const failedEntry = capped.sandbox.snapshotEntries().find(entry => entry.key === 'tool:call_failed')
+  assert.equal(failedEntry.failure, true, 'live structured failure is marked on the row')
+  capped.sandbox.applyToolComplete({
+    session_id: 'runtime-1',
+    profile: 'tech',
+    payload: { tool_id: 'call_text_error', name: 'terminal', result: 'Error: boom' }
+  })
+  assert.equal(capped.sandbox.snapshotEntries().find(entry => entry.key === 'tool:call_text_error').failure, false, 'text heuristics are not used')
 
   const beforeStart = sandbox.snapshotEntries().length
   listeners.get('message.start')[0]({ session_id: 'runtime-1' })

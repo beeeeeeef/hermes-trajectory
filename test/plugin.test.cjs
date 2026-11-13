@@ -299,6 +299,13 @@ const history = {
   assert.equal(capped.sandbox.gapBefore(gaps, 1), 1.5)
   assert.equal(capped.sandbox.gapBefore(gaps, 2), null, 'untimed rows do not invent a step duration')
   assert.equal(capped.sandbox.gapBefore(gaps, 3), 2.5, 'gap measures from the nearest earlier timed event')
+  assert.equal(capped.sandbox.formatGap(0.4), '400ms')
+  assert.equal(capped.sandbox.formatGap(1.5), '1.5s')
+  assert.equal(capped.sandbox.formatGap(125), '2m 5s')
+  assert.equal(capped.sandbox.formatGap(3725), '1h 2m')
+  assert.equal(capped.sandbox.formatGap(90000), '1d 1h')
+  assert.equal(capped.sandbox.latestLabel(100), 'latest 100')
+  assert.equal(capped.sandbox.latestLabel(8), 'latest 8')
   assert.equal(capped.sandbox.shouldShowPreview(false, 'text'), true, 'closed rows show their summary')
   assert.equal(capped.sandbox.shouldShowPreview(true, 'text'), false, 'open rows must not repeat the summary above the detail')
 

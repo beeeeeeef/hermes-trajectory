@@ -303,6 +303,22 @@ function shouldShowPreview(open, preview) {
   return !open && Boolean(preview)
 }
 
+function formatGap(seconds) {
+  if (seconds < 1) return `${Math.round(seconds * 1000)}ms`
+  if (seconds < 60) return `${seconds.toFixed(1)}s`
+  const total = Math.round(seconds)
+  const days = Math.floor(total / 86400)
+  const hours = Math.floor((total % 86400) / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  if (days > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes}m ${total % 60}s`
+}
+
+function latestLabel(count) {
+  return `latest ${count}`
+}
+
 /** Seconds since the nearest earlier timed event; null when either side is untimed. */
 function gapBefore(entries, index) {
   const current = entries[index]
@@ -452,7 +468,7 @@ function EntryRow({ entry, gapS }) {
         ? jsx('span', { title: 'Tool duration', className: 'shrink-0 text-[0.625rem] tabular-nums text-(--ui-text-tertiary)', children: duration })
         : null,
       gapS !== null
-        ? jsx('span', { title: 'Time since the previous event', className: 'shrink-0 text-[0.625rem] tabular-nums text-(--ui-text-quaternary)', children: `+${gapS.toFixed(1)}s` })
+        ? jsx('span', { title: 'Time since the previous event', className: 'shrink-0 text-[0.625rem] tabular-nums text-(--ui-text-quaternary)', children: `+${formatGap(gapS)}` })
         : null,
       disclosure.expandable
         ? jsx('span', { className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary)', children: open ? '▾' : '▸' })
@@ -492,6 +508,12 @@ function EntryRow({ entry, gapS }) {
             'aria-label': `${open ? 'Collapse' : 'Expand'} ${entryLabel(entry)}: ${preview.slice(0, 80)}`,
             className: 'block w-full rounded-lg hover:bg-(--ui-bg-tertiary) focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-(--ui-accent)',
             onClick: () => setOpen(value => !value),
+            onKeyDown: event => {
+              if (event.key === 'Escape' && open) {
+                event.preventDefault()
+                setOpen(false)
+              }
+            },
             children: body
           })
         : jsx('div', { className: 'block w-full', children: body }),
@@ -506,7 +528,9 @@ function EntryRow({ entry, gapS }) {
               className: 'mb-1 rounded-[10px] px-2 py-1.5 ml-[4.5rem]',
               style: {
                 backgroundColor: 'color-mix(in srgb, var(--ui-text-tertiary) 8%, transparent)',
-                border: '1px solid color-mix(in srgb, var(--ui-text-tertiary) 10%, transparent)'
+                border: '1px solid color-mix(in srgb, var(--ui-text-tertiary) 10%, transparent)',
+                maxHeight: '50vh',
+                overflowY: 'auto'
               },
               children: sections.map((section, index) => jsxs('div', { className: 'flex flex-col gap-0.5', children: [
               section.label
@@ -563,7 +587,7 @@ function TrajectoryPanel() {
       jsxs('div', { className: 'flex items-center gap-2 border-b border-(--ui-stroke-secondary) px-2 py-1.5', children: [
         jsx('div', { className: 'text-sm font-semibold', children: 'Trajectory' }),
         jsxs('div', { className: 'flex items-baseline gap-2 text-[0.6875rem] tabular-nums text-(--ui-text-tertiary)', children: [
-          jsx('span', { children: `${entries.length} events` }),
+          jsx('span', { title: 'Only the most recent entries are shown', children: latestLabel(entries.length) }),
           jsx('span', { className: 'border-l border-(--ui-stroke-secondary) pl-2', children: `${toolCount} tools` })
         ] }),
         jsx('button', {

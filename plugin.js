@@ -258,7 +258,7 @@ function applyToolComplete(event) {
     args: previous?.args ?? clip(typeof payload.args === 'object' ? JSON.stringify(payload.args) : '', 300),
     result,
     resultAvailable: Object.prototype.hasOwnProperty.call(payload, 'result'),
-    failure: toolFailure(payload.result),
+    failure: toolFailure(payload),
     durationS: typeof payload.duration_s === 'number' && Number.isFinite(payload.duration_s)
       ? payload.duration_s
       : null,
@@ -287,8 +287,13 @@ function statusTextOf(entry) {
   return statusText(entry)
 }
 
-/** Only structured evidence counts as a failed tool; result text is arbitrary. */
-function toolFailure(result) {
+/**
+ * The gateway's is_error is authoritative. Older gateways may omit it, so keep
+ * the structured-result fallback; raw result text is arbitrary and is not used.
+ */
+function toolFailure(payload) {
+  if (payload?.is_error === true) return true
+  const result = payload?.result
   if (!result || typeof result !== 'object' || Array.isArray(result)) return false
   if (result.success === false) return true
   return typeof result.error === 'string' && result.error.trim().length > 0

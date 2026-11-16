@@ -339,10 +339,11 @@ const history = {
   finishOlder({ count: 1, messages: [{ role: 'assistant', row_id: 901, timestamp: 1793525400, text: 'stale' }] })
   await staleRead
   assert.equal(racing.sandbox.snapshotEntries().some(entry => entry.key === 'row:901'), false, 'an older request may not overwrite a newer refresh')
-  assert.equal(capped.sandbox.toolFailure({ success: false }), true)
-  assert.equal(capped.sandbox.toolFailure({ error: 'boom' }), true)
-  assert.equal(capped.sandbox.toolFailure({ success: true }), false)
-  assert.equal(capped.sandbox.toolFailure('Error: boom'), false, 'plain text is not evidence of a failed tool')
+  assert.equal(capped.sandbox.toolFailure({ result: { success: false } }), true)
+  assert.equal(capped.sandbox.toolFailure({ result: { error: 'boom' } }), true)
+  assert.equal(capped.sandbox.toolFailure({ result: { success: true } }), false)
+  assert.equal(capped.sandbox.toolFailure({ result: 'Error: boom' }), false, 'plain text is not evidence of a failed tool')
+  assert.equal(capped.sandbox.toolFailure({ is_error: true, result: 'Error: boom' }), true, 'gateway is_error is authoritative')
   capped.sandbox.applyToolComplete({
     session_id: 'runtime-1',
     profile: 'tech',
@@ -356,6 +357,18 @@ const history = {
     payload: { tool_id: 'call_text_error', name: 'terminal', result: 'Error: boom' }
   })
   assert.equal(capped.sandbox.snapshotEntries().find(entry => entry.key === 'tool:call_text_error').failure, false, 'text heuristics are not used')
+  capped.sandbox.applyToolComplete({
+    session_id: 'runtime-1',
+    profile: 'tech',
+    payload: { tool_id: 'call_gateway_error', name: 'terminal', result: 'Error: boom', is_error: true }
+  })
+  assert.equal(capped.sandbox.snapshotEntries().find(entry => entry.key === 'tool:call_gateway_error').failure, true, 'gateway is_error marks the row failed')
+  capped.sandbox.applyToolComplete({
+    session_id: 'runtime-1',
+    profile: 'tech',
+    payload: { tool_id: 'call_gateway_ok', name: 'terminal', result: 'Error: boom', is_error: false }
+  })
+  assert.equal(capped.sandbox.snapshotEntries().find(entry => entry.key === 'tool:call_gateway_ok').failure, false, 'is_error false wins over error-looking text')
 
   const beforeStart = sandbox.snapshotEntries().length
   listeners.get('message.start')[0]({ session_id: 'runtime-1' })

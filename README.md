@@ -1,5 +1,7 @@
 # hermes-trajectory
 
+English | [中文](README.zh.md)
+
 A read-only Hermes Desktop plugin that shows one chat as a chronological ledger of user messages, assistant replies, and tool calls.
 
 ## What it shows

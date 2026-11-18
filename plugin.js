@@ -491,7 +491,11 @@ function EntryRow({ entry, gapS }) {
           jsx('span', { className: 'truncate', children: entryLabel(entry) })
         ]
       }),
-      jsx('span', { className: 'min-w-0 flex-1 truncate font-mono text-[0.75rem] text-(--ui-text-primary)', children: isTool ? entry.name || 'tool' : 'message' }),
+      jsx('span', {
+        title: isTool ? entry.name || 'tool' : undefined,
+        className: 'min-w-0 flex-1 truncate font-mono text-[0.75rem] text-(--ui-text-primary)',
+        children: isTool ? entry.name || 'tool' : 'message'
+      }),
       entry.failure
         ? jsx('span', { className: 'shrink-0 rounded-full px-1.5 py-0.5 text-[0.625rem]', style: { backgroundColor: 'color-mix(in srgb, var(--ui-red) 14%, transparent)', color: 'var(--ui-red)' }, children: 'failed' })
         : null,
